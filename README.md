@@ -2,7 +2,7 @@
 
 這個公開倉庫只放可玩的靜態預覽，不是遊戲原始碼。
 
-This build is the Phase 2B test build from private commit c7c44ad.
+This build is the Phase 2C test build from private commit aa6104d.
 
 正式開發存放在私人倉庫，沒有放在這裡。這裡沒有 TypeScript 原始檔、設計文件、存檔、金鑰或角色 CG。
 
