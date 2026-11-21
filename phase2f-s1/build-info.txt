@@ -1,0 +1,3 @@
+commit: d7fe66d367f377b67b3f68b65e21cbddfb8c12fa
+built: 2026-11-21T06:43:15Z
+base: /ai-town-adv-preview/phase2f-s1/
