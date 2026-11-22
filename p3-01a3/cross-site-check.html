@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>AI Town ADV｜跨站連線診斷（P3-01A3）</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10141c;
+        --card: #18202c;
+        --border: #2b384d;
+        --text: #eef3fa;
+        --muted: #a6b4c8;
+        --accent: #4ea1ff;
+        --accent-strong: #257be6;
+        --ok-bg: #133122;
+        --ok-border: #2f855a;
+        --ok-text: #9ae6b4;
+        --warn-bg: #352712;
+        --warn-border: #b7791f;
+        --warn-text: #fbd38d;
+        --err-bg: #38181c;
+        --err-border: #c53030;
+        --err-text: #feb2b2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.55;
+      }
+
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        display: grid;
+        gap: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 1.25rem;
+        line-height: 1.3;
+      }
+
+      h2 {
+        margin: 0 0 8px;
+        font-size: 1rem;
+      }
+
+      p,
+      li {
+        margin: 0;
+        font-size: 0.94rem;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .meta-list {
+        display: grid;
+        gap: 6px;
+        margin-top: 8px;
+        font-size: 0.88rem;
+      }
+
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: space-between;
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+        padding-bottom: 4px;
+      }
+
+      .meta-row:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.85em;
+        word-break: break-all;
+      }
+
+      ol {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .actions {
+        display: grid;
+        gap: 10px;
+      }
+
+      button,
+      .link-btn {
+        display: block;
+        width: 100%;
+        min-height: 48px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid transparent;
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: center;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+
+      .btn-primary {
+        background: var(--accent-strong);
+        color: #ffffff;
+      }
+
+      .btn-secondary {
+        background: #222e40;
+        color: var(--text);
+        border-color: var(--border);
+      }
+
+      .link-btn {
+        background: #1d293a;
+        color: var(--accent);
+        border-color: #344a68;
+        font-size: 0.94rem;
+      }
+
+      .result-box {
+        border-radius: 10px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        background: #121822;
+        display: grid;
+        gap: 8px;
+      }
+
+      .result-box.status-ok {
+        background: var(--ok-bg);
+        border-color: var(--ok-border);
+      }
+
+      .result-box.status-warn {
+        background: var(--warn-bg);
+        border-color: var(--warn-border);
+      }
+
+      .result-box.status-err {
+        background: var(--err-bg);
+        border-color: var(--err-border);
+      }
+
+      .badge {
+        font-weight: 700;
+        font-size: 0.96rem;
+      }
+
+      .status-ok .badge {
+        color: var(--ok-text);
+      }
+
+      .status-warn .badge {
+        color: var(--warn-text);
+      }
+
+      .status-err .badge {
+        color: var(--err-text);
+      }
+
+      pre {
+        margin: 0;
+        padding: 10px;
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.35);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.82rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <h1>GitHub Pages → Cloudflare Worker 跨站連線診斷</h1>
+        <p class="muted" style="margin-top: 6px;">
+          獨立於遊戲存檔（IndexedDB）與對話系統。本頁載入時<strong>不會自動發送任何請求</strong>，僅呼叫零 AI 費用的
+          <code>GET /auth/verify</code> 與 <code>GET /health</code>，不讀取、不顯示、不儲存任何 Cookie、JWT、Email 或憑證。
+        </p>
+        <div class="meta-list">
+          <div class="meta-row">
+            <span class="muted">目前頁面 Origin</span>
+            <code id="current-origin">讀取中…</code>
+          </div>
+          <div class="meta-row">
+            <span class="muted">顯示模式</span>
+            <code id="display-mode">讀取中…</code>
+          </div>
+          <div class="meta-row">
+            <span class="muted">目標 Worker</span>
+            <code id="worker-origin">https://ai-town-adv-gateway.basf517.workers.dev</code>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Pixel 10 實機測試步驟</h2>
+        <ol>
+          <li>
+            請先在<strong>同一個 Chrome 設定檔（非無痕）</strong>直接開啟 Worker 登入驗證頁，完成 Cloudflare Access 登入並確認看到
+            <code>authenticated: true</code>：
+            <div style="margin-top: 8px;">
+              <a
+                class="link-btn"
+                href="https://ai-town-adv-gateway.basf517.workers.dev/auth/verify"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                步驟 1：在新分頁開啟 Worker /auth/verify 登入
+              </a>
+            </div>
+          </li>
+          <li>回到本頁，確認上方「目前頁面 Origin」為 <code>https://a0kman.github.io</code>。</li>
+          <li>依序按下下方「對照測試（GET /health）」與「測試跨站連線（GET /auth/verify）」。</li>
+          <li>
+            <strong>PWA 模式提醒</strong>：若已將預覽頁加入主畫面（PWA），請在 PWA 視窗內直接開啟此診斷頁網址測試。若因 PWA
+            <code>start_url</code> 或導覽範圍限制無法從遊戲介面切到此頁，請直接記錄該限制並以一般 Chrome 分頁結果回報（本頁不更動遊戲導覽）。
+          </li>
+        </ol>
+      </section>
+
+      <section class="card">
+        <h2>手動執行測試（零 AI 費用）</h2>
+        <div class="actions">
+          <button id="btn-verify" class="btn-primary" type="button">
+            測試跨站連線（GET /auth/verify，含 credentials: include）
+          </button>
+          <button id="btn-health" class="btn-secondary" type="button">
+            對照測試（GET /health，不含憑證）
+          </button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>GET /auth/verify 診斷結果</h2>
+        <div id="verify-result" class="result-box">
+          <div id="verify-badge" class="badge">尚未測試</div>
+          <p id="verify-summary" class="muted">按下上方「測試跨站連線」按鈕後才會送出請求。</p>
+          <pre id="verify-details">尚未執行</pre>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>GET /health 對照結果</h2>
+        <div id="health-result" class="result-box">
+          <div id="health-badge" class="badge">尚未測試</div>
+          <p id="health-summary" class="muted">按下上方「對照測試」按鈕後才會送出請求。</p>
+          <pre id="health-details">尚未執行</pre>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (() => {
+        'use strict';
+
+        const WORKER_BASE = 'https://ai-town-adv-gateway.basf517.workers.dev';
+        const ALLOWED_ERROR_CODES = new Set([
+          'unauthorized',
+          'forbidden',
+          'origin-not-allowed',
+          'gateway-disabled',
+          'method-not-allowed',
+          'not-found',
+        ]);
+
+        const originEl = document.getElementById('current-origin');
+        const modeEl = document.getElementById('display-mode');
+        const btnVerify = document.getElementById('btn-verify');
+        const btnHealth = document.getElementById('btn-health');
+
+        const verifyBox = document.getElementById('verify-result');
+        const verifyBadge = document.getElementById('verify-badge');
+        const verifySummary = document.getElementById('verify-summary');
+        const verifyDetails = document.getElementById('verify-details');
+
+        const healthBox = document.getElementById('health-result');
+        const healthBadge = document.getElementById('health-badge');
+        const healthSummary = document.getElementById('health-summary');
+        const healthDetails = document.getElementById('health-details');
+
+        const isStandalone =
+          Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+          Boolean(window.navigator && window.navigator.standalone === true);
+
+        originEl.textContent = window.location.origin || '(unknown)';
+        modeEl.textContent = isStandalone ? 'PWA (standalone)' : '一般瀏覽器分頁';
+
+        function setResult(box, badgeEl, summaryEl, detailsEl, level, badgeText, summaryText, payload) {
+          box.className = 'result-box' + (level ? ' status-' + level : '');
+          badgeEl.textContent = badgeText;
+          summaryEl.textContent = summaryText;
+          detailsEl.textContent = JSON.stringify(payload, null, 2);
+        }
+
+        function sanitizeCode(raw) {
+          return typeof raw === 'string' && ALLOWED_ERROR_CODES.has(raw) ? raw : 'unknown';
+        }
+
+        async function parseJsonSafely(response) {
+          const contentType = response.headers.get('content-type') || '';
+          if (!contentType.toLowerCase().includes('application/json')) {
+            return { parsed: null, isJson: false };
+          }
+          try {
+            const data = await response.json();
+            return {
+              parsed: data && typeof data === 'object' ? data : null,
+              isJson: true,
+            };
+          } catch {
+            return { parsed: null, isJson: false };
+          }
+        }
+
+        async function runVerifyTest() {
+          btnVerify.disabled = true;
+          const startedAt = new Date().toISOString();
+          setResult(
+            verifyBox,
+            verifyBadge,
+            verifySummary,
+            verifyDetails,
+            '',
+            '測試中…',
+            '正在以 credentials: include 呼叫 GET /auth/verify…',
+            { startedAt, endpoint: '/auth/verify', credentials: 'include' }
+          );
+
+          try {
+            const response = await fetch(WORKER_BASE + '/auth/verify', {
+              method: 'GET',
+              mode: 'cors',
+              credentials: 'include',
+              cache: 'no-store',
+            });
+
+            if (response.type === 'opaqueredirect' || response.status === 0) {
+              setResult(
+                verifyBox,
+                verifyBadge,
+                verifySummary,
+                verifyDetails,
+                'warn',
+                '無法判定（收到不透明回應或重導向）',
+                '可能是 Cloudflare Access 重導向登入頁、第三方 Cookie 被阻擋，或 CORS 限制；單靠前端 JS 無法精確區分原因，不得視為驗證成功。',
+                {
+                  testedAt: startedAt,
+                  endpoint: '/auth/verify',
+                  credentials: 'include',
+                  responseType: response.type,
+                  httpStatus: response.status,
+                  authenticated: false,
+                }
+              );
+              return;
+            }
+
+            const { parsed, isJson } = await parseJsonSafely(response);
+            if (!isJson || !parsed) {
+              setResult(
+                verifyBox,
+                verifyBadge,
+                verifySummary,
+                verifyDetails,
+                'warn',
+                '未取得預期的 JSON 驗證回應（HTTP ' + response.status + '）',
+                '回應不是 Worker 預期的 JSON 格式，可能是 Cloudflare Access 登入頁或中繼錯誤頁；無法確認跨站驗證成功。',
+                {
+                  testedAt: startedAt,
+                  endpoint: '/auth/verify',
+                  credentials: 'include',
+                  httpStatus: response.status,
+                  responseType: response.type,
+                  jsonParsed: false,
+                  authenticated: false,
+                }
+              );
+              return;
+            }
+
+            const safePayload = {
+              testedAt: startedAt,
+              endpoint: '/auth/verify',
+              credentials: 'include',
+              httpStatus: response.status,
+              ok: parsed.ok === true,
+              authenticated: parsed.authenticated === true,
+              durableBudgetBound:
+                typeof parsed.durableBudgetBound === 'boolean' ? parsed.durableBudgetBound : null,
+              code: response.ok ? null : sanitizeCode(parsed.code),
+            };
+
+            if (response.status === 200 && safePayload.ok && safePayload.authenticated) {
+              setResult(
+                verifyBox,
+                verifyBadge,
+                verifySummary,
+                verifyDetails,
+                'ok',
+                '成功：跨站 Cookie 與 Access JWT 驗證通過（HTTP 200）',
+                '瀏覽器已從目前 Origin 成功攜帶 Access 憑證至 Worker，且通過 CORS 與 JWT 驗證（零 AI 費用）。',
+                safePayload
+              );
+            } else {
+              setResult(
+                verifyBox,
+                verifyBadge,
+                verifySummary,
+                verifyDetails,
+                'err',
+                '失敗：Worker 回傳未通過驗證（HTTP ' + response.status + '）',
+                '跨站連線已抵達 Worker，但未通過身份或來源檢查（可能未攜帶有效 Cookie、帳號不在白名單，或 Origin 不在 ALLOWED_ORIGINS）。',
+                safePayload
+              );
+            }
+          } catch (error) {
+            setResult(
+              verifyBox,
+              verifyBadge,
+              verifySummary,
+              verifyDetails,
+              'warn',
+              '遭瀏覽器阻擋或網路失敗（無法精確區分原因）',
+              'Fetch 被瀏覽器中斷：可能是 Cloudflare Access 302 重導向登入頁、第三方 Cookie 被封鎖、CORS 阻擋或網路中斷。單靠前端 JS 無法精確區分，不得視為驗證成功。',
+              {
+                testedAt: startedAt,
+                endpoint: '/auth/verify',
+                credentials: 'include',
+                httpStatus: null,
+                errorType: error && error.name ? String(error.name) : 'Error',
+                authenticated: false,
+              }
+            );
+          } finally {
+            btnVerify.disabled = false;
+          }
+        }
+
+        async function runHealthTest() {
+          btnHealth.disabled = true;
+          const startedAt = new Date().toISOString();
+          setResult(
+            healthBox,
+            healthBadge,
+            healthSummary,
+            healthDetails,
+            '',
+            '測試中…',
+            '正在以不含憑證模式呼叫 GET /health…',
+            { startedAt, endpoint: '/health', credentials: 'omit' }
+          );
+
+          try {
+            const response = await fetch(WORKER_BASE + '/health', {
+              method: 'GET',
+              mode: 'cors',
+              credentials: 'omit',
+              cache: 'no-store',
+            });
+
+            const { parsed, isJson } = await parseJsonSafely(response);
+            if (response.status === 200 && isJson && parsed && parsed.ok === true) {
+              setResult(
+                healthBox,
+                healthBadge,
+                healthSummary,
+                healthDetails,
+                'ok',
+                '成功：Worker /health 可跨站讀取（HTTP 200）',
+                '基本網路連線與 Worker CORS 標頭對目前 Origin 正常運作。',
+                {
+                  testedAt: startedAt,
+                  endpoint: '/health',
+                  credentials: 'omit',
+                  httpStatus: response.status,
+                  ok: true,
+                  service: typeof parsed.service === 'string' ? parsed.service : null,
+                  mode: typeof parsed.mode === 'string' ? parsed.mode : null,
+                  remoteEnabled:
+                    typeof parsed.remoteEnabled === 'boolean' ? parsed.remoteEnabled : null,
+                  accessConfigured:
+                    typeof parsed.accessConfigured === 'boolean' ? parsed.accessConfigured : null,
+                  durableBudgetBound:
+                    typeof parsed.durableBudgetBound === 'boolean'
+                      ? parsed.durableBudgetBound
+                      : null,
+                  corsOriginsConfigured:
+                    typeof parsed.corsOriginsConfigured === 'boolean'
+                      ? parsed.corsOriginsConfigured
+                      : null,
+                }
+              );
+            } else {
+              setResult(
+                healthBox,
+                healthBadge,
+                healthSummary,
+                healthDetails,
+                'warn',
+                '異常：/health 回傳非預期結果（HTTP ' + response.status + '）',
+                '未能取得預期的 /health JSON，可能是 Access 規則同時攔截 /health 或 Worker 回傳異常。',
+                {
+                  testedAt: startedAt,
+                  endpoint: '/health',
+                  credentials: 'omit',
+                  httpStatus: response.status,
+                  jsonParsed: isJson,
+                }
+              );
+            }
+          } catch (error) {
+            setResult(
+              healthBox,
+              healthBadge,
+              healthSummary,
+              healthDetails,
+              'warn',
+              '遭瀏覽器阻擋或網路失敗（無法精確區分原因）',
+              '對照請求被瀏覽器阻擋：可能是目前 Origin 不在 Worker ALLOWED_ORIGINS、Cloudflare Access 攔截 /health 重導向登入頁，或裝置網路離線。',
+              {
+                testedAt: startedAt,
+                endpoint: '/health',
+                credentials: 'omit',
+                httpStatus: null,
+                errorType: error && error.name ? String(error.name) : 'Error',
+              }
+            );
+          } finally {
+            btnHealth.disabled = false;
+          }
+        }
+
+        btnVerify.addEventListener('click', runVerifyTest);
+        btnHealth.addEventListener('click', runHealthTest);
+      })();
+    </script>
+  </body>
+</html>
