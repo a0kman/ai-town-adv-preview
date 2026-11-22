@@ -284,6 +284,35 @@
           <pre id="health-details">尚未執行</pre>
         </div>
       </section>
+
+      <section class="card">
+        <h2>手動 POST Mock 對話測試（P3-01A4｜零 AI 費用）</h2>
+        <p class="muted">
+          使用固定、無私人資料的最小契約送出 <code>POST /api/dialogue</code>（<code>credentials: 'include'</code>、<code>Content-Type: application/json</code>），驗證 CORS <code>OPTIONS</code> 預檢、Cloudflare Access JWT、Dry-Run Mock 回應與 Durable Object 請求流程。
+        </p>
+        <p class="muted" style="margin-top: 6px;">
+          <strong>注意（OPTIONS 預檢風險）：</strong>瀏覽器送出 JSON <code>POST</code> 前會先發送 <code>OPTIONS</code> 預檢請求，Cloudflare Access 可能在到達 Worker 前即阻擋 <code>OPTIONS</code>；若遭阻擋，前端 JS 無法精確區分原因，不得視為驗證成功。本頁每次載入最多僅允許手動送出 <strong>3 次</strong>（不自動請求、不連發壓測）。
+        </p>
+        <pre style="margin-top: 8px;">{"apiVersion":1,"npcId":"npc-cafe-clerk","playerText":"你好，這是一次零費用連線測試。","history":[]}</pre>
+        <div class="actions" style="margin-top: 10px;">
+          <button id="btn-post-mock" class="btn-primary" type="button">
+            測試固定 Mock 回應（POST /api/dialogue）
+          </button>
+          <button id="btn-post-repeat" class="btn-secondary" type="button" disabled>
+            再測一次（跨請求 DO 狀態驗證｜須先成功一次）
+          </button>
+        </div>
+        <p id="post-quota-note" class="muted" style="margin-top: 8px;">
+          本頁剩餘可手動測試次數：3 / 3（測完請回 Cloudflare Dashboard 關閉 Dry-Run 開關並重測 /health）
+        </p>
+        <div id="post-result" class="result-box" style="margin-top: 10px;">
+          <div id="post-badge" class="badge">尚未測試</div>
+          <p id="post-summary" class="muted">
+            按下上方「測試固定 Mock 回應」後才會送出請求。若 Worker 尚未短暫開啟 Dry-Run Mock，預期會回傳 HTTP 503（<code>upstream-disabled</code>）。
+          </p>
+          <pre id="post-details">尚未執行</pre>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -291,12 +320,37 @@
         'use strict';
 
         const WORKER_BASE = 'https://ai-town-adv-gateway.basf517.workers.dev';
+        const MAX_POST_ATTEMPTS = 3;
+        const FIXED_MOCK_PAYLOAD = Object.freeze({
+          apiVersion: 1,
+          npcId: 'npc-cafe-clerk',
+          playerText: '你好，這是一次零費用連線測試。',
+          history: [],
+        });
         const ALLOWED_ERROR_CODES = new Set([
           'unauthorized',
           'forbidden',
           'origin-not-allowed',
           'gateway-disabled',
+          'upstream-disabled',
+          'non-durable-budget-rejected',
+          'budget-not-configured',
+          'budget-exceeded',
+          'rate-limited',
           'method-not-allowed',
+          'invalid-request',
+          'invalid-json',
+          'forbidden-field',
+          'unsupported-version',
+          'invalid-npc',
+          'invalid-input',
+          'invalid-history',
+          'invalid-context',
+          'payload-too-large',
+          'invalid-reply',
+          'upstream',
+          'timeout',
+          'cancelled',
           'not-found',
         ]);
 
@@ -304,6 +358,9 @@
         const modeEl = document.getElementById('display-mode');
         const btnVerify = document.getElementById('btn-verify');
         const btnHealth = document.getElementById('btn-health');
+        const btnPostMock = document.getElementById('btn-post-mock');
+        const btnPostRepeat = document.getElementById('btn-post-repeat');
+        const postQuotaNote = document.getElementById('post-quota-note');
 
         const verifyBox = document.getElementById('verify-result');
         const verifyBadge = document.getElementById('verify-badge');
@@ -314,6 +371,15 @@
         const healthBadge = document.getElementById('health-badge');
         const healthSummary = document.getElementById('health-summary');
         const healthDetails = document.getElementById('health-details');
+
+        const postBox = document.getElementById('post-result');
+        const postBadge = document.getElementById('post-badge');
+        const postSummary = document.getElementById('post-summary');
+        const postDetails = document.getElementById('post-details');
+
+        let postAttemptCount = 0;
+        let hasPostMockSuccess = false;
+        let isPostBusy = false;
 
         const isStandalone =
           Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
@@ -567,8 +633,244 @@
           }
         }
 
+        function syncPostButtons() {
+          const remaining = Math.max(0, MAX_POST_ATTEMPTS - postAttemptCount);
+          const exhausted = remaining <= 0;
+          btnPostMock.disabled = isPostBusy || exhausted;
+          btnPostRepeat.disabled = isPostBusy || exhausted || !hasPostMockSuccess;
+          postQuotaNote.textContent = exhausted
+            ? '本頁已達手動測試上限（3 / 3），請重新整理頁面或先回 Cloudflare Dashboard 關閉 Dry-Run 開關並重測 /health。'
+            : '本頁剩餘可手動測試次數：' +
+              remaining +
+              ' / ' +
+              MAX_POST_ATTEMPTS +
+              '（測完請回 Cloudflare Dashboard 關閉 Dry-Run 開關並重測 /health）';
+        }
+
+        async function runPostMockTest(isRepeat) {
+          if (isPostBusy || postAttemptCount >= MAX_POST_ATTEMPTS) {
+            syncPostButtons();
+            return;
+          }
+          if (isRepeat && !hasPostMockSuccess) {
+            syncPostButtons();
+            return;
+          }
+
+          isPostBusy = true;
+          postAttemptCount += 1;
+          const attemptNumber = postAttemptCount;
+          syncPostButtons();
+
+          const startedAt = new Date().toISOString();
+          setResult(
+            postBox,
+            postBadge,
+            postSummary,
+            postDetails,
+            '',
+            '測試中（第 ' + attemptNumber + ' / ' + MAX_POST_ATTEMPTS + ' 次）…',
+            '正在以 credentials: include 與 Content-Type: application/json 送出 POST /api/dialogue…',
+            {
+              attempt: attemptNumber,
+              maxAttempts: MAX_POST_ATTEMPTS,
+              repeatCheck: Boolean(isRepeat),
+              startedAt,
+              endpoint: '/api/dialogue',
+              method: 'POST',
+              credentials: 'include',
+            }
+          );
+
+          try {
+            const response = await fetch(WORKER_BASE + '/api/dialogue', {
+              method: 'POST',
+              mode: 'cors',
+              credentials: 'include',
+              cache: 'no-store',
+              headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+              },
+              body: JSON.stringify(FIXED_MOCK_PAYLOAD),
+            });
+
+            if (response.type === 'opaqueredirect' || response.status === 0) {
+              setResult(
+                postBox,
+                postBadge,
+                postSummary,
+                postDetails,
+                'warn',
+                '無法判定（收到不透明回應或重導向）',
+                '可能是 Cloudflare Access 阻擋 OPTIONS 預檢或重導向登入頁、第三方 Cookie 被阻擋，或 CORS 限制；單靠前端 JS 無法精確區分原因，不得視為驗證成功。',
+                {
+                  attempt: attemptNumber,
+                  maxAttempts: MAX_POST_ATTEMPTS,
+                  testedAt: startedAt,
+                  endpoint: '/api/dialogue',
+                  method: 'POST',
+                  credentials: 'include',
+                  responseType: response.type,
+                  httpStatus: response.status,
+                  ok: false,
+                }
+              );
+              return;
+            }
+
+            const { parsed, isJson } = await parseJsonSafely(response);
+            if (!isJson || !parsed) {
+              setResult(
+                postBox,
+                postBadge,
+                postSummary,
+                postDetails,
+                'warn',
+                '未取得預期的 JSON 回應（HTTP ' + response.status + '）',
+                '回應不是 Worker 預期的 JSON 格式，可能是 Cloudflare Access 登入頁或中繼錯誤頁；無法確認 POST 驗證成功。',
+                {
+                  attempt: attemptNumber,
+                  maxAttempts: MAX_POST_ATTEMPTS,
+                  testedAt: startedAt,
+                  endpoint: '/api/dialogue',
+                  method: 'POST',
+                  credentials: 'include',
+                  httpStatus: response.status,
+                  responseType: response.type,
+                  jsonParsed: false,
+                  ok: false,
+                }
+              );
+              return;
+            }
+
+            const replyObj =
+              parsed.reply && typeof parsed.reply === 'object' && !Array.isArray(parsed.reply)
+                ? parsed.reply
+                : null;
+            const mockText =
+              replyObj && typeof replyObj.text === 'string'
+                ? replyObj.text.slice(0, 400)
+                : null;
+            const expression =
+              replyObj && typeof replyObj.expression === 'string'
+                ? replyObj.expression.slice(0, 32)
+                : null;
+            const requestId =
+              typeof parsed.requestId === 'string' && /^gw-[a-zA-Z0-9-]{4,64}$/.test(parsed.requestId)
+                ? parsed.requestId
+                : null;
+
+            if (response.status === 200 && parsed.apiVersion === 1 && mockText) {
+              hasPostMockSuccess = true;
+              setResult(
+                postBox,
+                postBadge,
+                postSummary,
+                postDetails,
+                'ok',
+                '成功：收到零費用 Dry-Run Mock 回應（HTTP 200）',
+                isRepeat
+                  ? '第二次跨請求 POST 亦成功通過 Access JWT、CORS 與 Durable Object 流程（註：前端無 DO 累計數字查詢介面，僅驗證連續跨請求行為）。測完請務必關閉 Dashboard 兩項開關並重測 /health。'
+                  : '跨站 OPTIONS 預檢、Access JWT、Worker CORS、Dry-Run Mock 與 Durable Object 預留／結算流程皆成功。可選擇按「再測一次」驗證跨請求行為；測完請務必關閉 Dashboard 兩項開關並重測 /health。',
+                {
+                  attempt: attemptNumber,
+                  maxAttempts: MAX_POST_ATTEMPTS,
+                  repeatCheck: Boolean(isRepeat),
+                  testedAt: startedAt,
+                  endpoint: '/api/dialogue',
+                  method: 'POST',
+                  credentials: 'include',
+                  httpStatus: response.status,
+                  ok: true,
+                  apiVersion: 1,
+                  requestId,
+                  expression,
+                  mockText,
+                }
+              );
+              return;
+            }
+
+            const safeCode = sanitizeCode(parsed.code);
+            let failureSummary =
+              '跨站 POST 已抵達 Worker，但未成功取得 Mock 回應，請依 HTTP 狀態碼與公開錯誤碼排查。';
+            let failureLevel = 'err';
+
+            if (response.status === 503 && safeCode === 'upstream-disabled') {
+              failureLevel = 'warn';
+              failureSummary =
+                '預期中的 fail-closed（HTTP 503 / upstream-disabled）：跨站 POST 與 Access JWT 已抵達 Worker，但 Worker 尚未暫時開啟 REMOTE_DIALOGUE_ENABLED=true 與 GATEWAY_DRY_RUN_MOCK=true。';
+            } else if (response.status === 429) {
+              failureLevel = 'warn';
+              failureSummary =
+                '觸發 Durable Object 限流或預算保護（HTTP 429 / ' +
+                safeCode +
+                '）：代表跨站 POST 已進入 Worker 與 DO 檢查層，請勿重複連發。';
+            } else if (response.status === 401 || response.status === 403) {
+              failureSummary =
+                '身分或來源未通過檢查（HTTP ' +
+                response.status +
+                ' / ' +
+                safeCode +
+                '）：請確認已於同 Chrome 設定檔登入 Access，且目前 Origin 在 ALLOWED_ORIGINS。';
+            }
+
+            setResult(
+              postBox,
+              postBadge,
+              postSummary,
+              postDetails,
+              failureLevel,
+              'Worker 回傳非 200（HTTP ' + response.status + ' / ' + safeCode + '）',
+              failureSummary,
+              {
+                attempt: attemptNumber,
+                maxAttempts: MAX_POST_ATTEMPTS,
+                repeatCheck: Boolean(isRepeat),
+                testedAt: startedAt,
+                endpoint: '/api/dialogue',
+                method: 'POST',
+                credentials: 'include',
+                httpStatus: response.status,
+                ok: false,
+                code: safeCode,
+              }
+            );
+          } catch (error) {
+            setResult(
+              postBox,
+              postBadge,
+              postSummary,
+              postDetails,
+              'warn',
+              '遭瀏覽器阻擋或網路失敗（無法精確區分原因）',
+              'POST 請求遭瀏覽器中斷：可能是 Cloudflare Access 擋下 OPTIONS 預檢請求、CORS 限制、第三方 Cookie 被封鎖或網路中斷。單靠前端 JS 無法精確區分，不得視為驗證成功。',
+              {
+                attempt: attemptNumber,
+                maxAttempts: MAX_POST_ATTEMPTS,
+                repeatCheck: Boolean(isRepeat),
+                testedAt: startedAt,
+                endpoint: '/api/dialogue',
+                method: 'POST',
+                credentials: 'include',
+                httpStatus: null,
+                ok: false,
+                errorType: error && error.name ? String(error.name) : 'Error',
+              }
+            );
+          } finally {
+            isPostBusy = false;
+            syncPostButtons();
+          }
+        }
+
         btnVerify.addEventListener('click', runVerifyTest);
         btnHealth.addEventListener('click', runHealthTest);
+        btnPostMock.addEventListener('click', () => runPostMockTest(false));
+        btnPostRepeat.addEventListener('click', () => runPostMockTest(true));
+        syncPostButtons();
       })();
     </script>
   </body>
