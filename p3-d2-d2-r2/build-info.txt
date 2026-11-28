@@ -1,0 +1,4 @@
+commit: d2b3c62b1e58d7ba70341924de9b7d5645b86891
+built: 2026-11-28T06:04:25Z
+base: /ai-town-adv-preview/p3-d2-d2-r2/
+mode: Mock-only
