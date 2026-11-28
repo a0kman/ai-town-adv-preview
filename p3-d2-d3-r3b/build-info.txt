@@ -1,0 +1,10 @@
+work-package: P3-D2-D3 R3-B
+source-repo: a0kman/ai-town-adv
+source-pr: https://github.com/a0kman/ai-town-adv/pull/142
+source-branch: feat/p3-d2-d3
+commit: d715fd449a6d7d31806cdadd45171208aaa2fdb9
+save-schema: v11
+base: /ai-town-adv-preview/p3-d2-d3-r3b/
+mode: Mock-only
+result: Vite 8.3.8 production build succeeded (126 modules, 0 errors)
+built: 2026-11-28T12:45:00Z
